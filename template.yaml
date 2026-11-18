@@ -37,14 +37,6 @@ Resources:
         - AttributeName: timestamp
           KeyType: RANGE
 
-  JwtSecret:
-    Type: AWS::SecretsManager::Secret
-    Properties:
-      Description: JWT signing key for lambda-lounge (generated, never leaves AWS)
-      GenerateSecretString:
-        PasswordLength: 64
-        ExcludePunctuation: true
-
   ChatApi:
     Type: AWS::Serverless::Function
     Properties:
@@ -59,13 +51,13 @@ Resources:
             TableName: !Ref UsersTable
         - DynamoDBCrudPolicy:
             TableName: !Ref MessagesTable
-        - AWSSecretsManagerGetSecretValuePolicy:
-            SecretArn: !Ref JwtSecret
+        - SSMParameterReadPolicy:
+            ParameterName: lambda-lounge/secret-key
       Environment:
         Variables:
           USERS_TABLE: !Ref UsersTable
           MESSAGES_TABLE: !Ref MessagesTable
-          SECRET_ARN: !Ref JwtSecret
+          SECRET_PARAMETER: /lambda-lounge/secret-key
       Events:
         ApiGateway:
           Type: Api

@@ -1,6 +1,8 @@
 # Lambda-lounge
 
-This is a serverless chat-application that works mostly as a proof of concept for creating a webserver with all it's routes be hosted as serverless instead of having a server idly running. It uses API Gateway, Lambda (FastAPI with Mangum) and DynamoDB, and the secret for the access tokens is generated in Secrets Manager.
+Latest API generated: not deployed yet
+
+This is a serverless chat-application that works mostly as a proof of concept for creating a webserver with all it's routes be hosted as serverless instead of having a server idly running. It uses API Gateway, Lambda (FastAPI with Mangum) and DynamoDB, and the secret for the access tokens is kept in SSM Parameter Store.
 
 It started out as my degree project [chatapp-serverless](https://github.com/houbou98-19/chatapp-serverless) (tag `thesis-final`) which used MongoDB Atlas. This version uses DynamoDB instead.
 
@@ -16,14 +18,13 @@ pytest
 
 ## Deploy to AWS
 
-You need the AWS CLI (configured) and SAM CLI. The stack creates its own tables and secret so there is nothing to put in SSM anymore.
+You need the AWS CLI (configured) and SAM CLI. Run
 
 ```bash
-sam build --use-container
-sam deploy --guided      # first time; later just `sam deploy`
+python deploy.py
 ```
 
-The API url is printed as an output when it is done.
+It creates the secret for the access tokens in SSM the first time (random, never in git), then does `sam build` and `sam deploy` and puts the new api url at the top of this README.
 
 ## Cleanup
 

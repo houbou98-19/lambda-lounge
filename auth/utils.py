@@ -13,8 +13,8 @@ ALGORITHM = "HS256"
 def get_secret_key():
     secret_key = os.getenv("SECRET_KEY")
     if not secret_key:
-        client = boto3.client("secretsmanager")
-        secret_key = client.get_secret_value(SecretId=os.getenv("SECRET_ARN"))["SecretString"]
+        client = boto3.client("ssm")
+        secret_key = client.get_parameter(Name=os.getenv("SECRET_PARAMETER"), WithDecryption=True)["Parameter"]["Value"]
     return secret_key
 
 def create_access_token(data: dict, expires_delta: timedelta = timedelta(minutes=30)):
