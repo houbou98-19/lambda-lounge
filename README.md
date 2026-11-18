@@ -18,13 +18,17 @@ pytest
 
 ## Deploy to AWS
 
-You need the AWS CLI (configured) and SAM CLI. Run
+Every push to main runs the tests and then deploys with GitHub Actions (`.github/workflows/deploy.yml`). It creates the secret for the access tokens in SSM the first time (random, never in git) and puts the new api url at the top of this README when it is done.
+
+GitHub logs in to AWS with OIDC so there are no access keys stored anywhere. The role it uses is created once from `infra/github-oidc.yaml`:
 
 ```bash
-python deploy.py
+aws cloudformation deploy --template-file infra/github-oidc.yaml --stack-name lambda-lounge-github --capabilities CAPABILITY_NAMED_IAM
 ```
 
-It creates the secret for the access tokens in SSM the first time (random, never in git), then does `sam build` and `sam deploy` and puts the new api url at the top of this README.
+Then add the role arn (printed as an output) as a repository variable called `AWS_ROLE_ARN`.
+
+To deploy by hand instead you can still run `sam build` and `sam deploy`.
 
 ## Cleanup
 

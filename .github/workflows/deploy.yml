@@ -1,0 +1,54 @@
+name: Test and deploy
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  id-token: write
+  contents: write
+
+concurrency: deploy
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -r requirements-dev.txt
+      - run: pytest
+
+  deploy:
+    needs: test
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: aws-actions/setup-sam@v2
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_ROLE_ARN }}
+          aws-region: eu-west-1
+
+      - name: Create the secret for the access tokens if it is missing
+        run: |
+          aws ssm get-parameter --name /lambda-lounge/secret-key > /dev/null 2>&1 || \
+          aws ssm put-parameter --name /lambda-lounge/secret-key --type SecureString --value "$(openssl rand -base64 48)"
+
+      - run: sam build --use-container
+      - run: sam deploy --stack-name lambda-lounge --resolve-s3 --capabilities CAPABILITY_IAM --no-confirm-changeset --no-fail-on-empty-changeset
+
+      - name: Put the api url in the README
+        run: |
+          URL=$(aws cloudformation describe-stacks --stack-name lambda-lounge --query "Stacks[0].Outputs[?OutputKey=='ApiUrl'].OutputValue" --output text)
+          sed -i "s|Latest API generated: .*|Latest API generated: $URL|" README.md
+          if ! git diff --quiet; then
+            git config user.name "github-actions"
+            git config user.email "github-actions@users.noreply.github.com"
+            git commit -am "Update api url [skip ci]"
+            git push
+          fi

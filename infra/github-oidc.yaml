@@ -1,0 +1,89 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: Lets GitHub Actions in houbou98-19/lambda-lounge deploy the lambda-lounge stack without access keys
+
+Parameters:
+  GitHubRepo:
+    Type: String
+    Default: houbou98-19/lambda-lounge
+  ExistingOidcProviderArn:
+    Type: String
+    Default: ''
+    Description: Leave empty unless this account already has the token.actions.githubusercontent.com provider
+
+Conditions:
+  CreateProvider: !Equals [!Ref ExistingOidcProviderArn, '']
+
+Resources:
+  GitHubProvider:
+    Type: AWS::IAM::OIDCProvider
+    Condition: CreateProvider
+    Properties:
+      Url: https://token.actions.githubusercontent.com
+      ClientIdList:
+        - sts.amazonaws.com
+
+  DeployRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: lambda-lounge-github-deploy
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Action: sts:AssumeRoleWithWebIdentity
+            Principal:
+              Federated: !If [CreateProvider, !Ref GitHubProvider, !Ref ExistingOidcProviderArn]
+            Condition:
+              StringEquals:
+                token.actions.githubusercontent.com:aud: sts.amazonaws.com
+                token.actions.githubusercontent.com:sub: !Sub repo:${GitHubRepo}:ref:refs/heads/main
+      Policies:
+        - PolicyName: deploy-lambda-lounge
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action: cloudformation:*
+                Resource:
+                  - !Sub arn:aws:cloudformation:${AWS::Region}:${AWS::AccountId}:stack/lambda-lounge/*
+                  - !Sub arn:aws:cloudformation:${AWS::Region}:${AWS::AccountId}:stack/aws-sam-cli-managed-default/*
+                  - !Sub arn:aws:cloudformation:${AWS::Region}:aws:transform/Serverless-2016-10-31
+              - Effect: Allow
+                Action: s3:*
+                Resource:
+                  - arn:aws:s3:::aws-sam-cli-managed-default-*
+                  - arn:aws:s3:::aws-sam-cli-managed-default-*/*
+              - Effect: Allow
+                Action:
+                  - lambda:*
+                  - apigateway:*
+                Resource: '*'
+              - Effect: Allow
+                Action: dynamodb:*
+                Resource: !Sub arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/lambda-lounge-*
+              - Effect: Allow
+                Action:
+                  - iam:CreateRole
+                  - iam:DeleteRole
+                  - iam:GetRole
+                  - iam:PassRole
+                  - iam:AttachRolePolicy
+                  - iam:DetachRolePolicy
+                  - iam:PutRolePolicy
+                  - iam:DeleteRolePolicy
+                  - iam:GetRolePolicy
+                  - iam:TagRole
+                Resource: !Sub arn:aws:iam::${AWS::AccountId}:role/lambda-lounge-*
+              - Effect: Allow
+                Action:
+                  - ssm:GetParameter
+                  - ssm:PutParameter
+                Resource: !Sub arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/lambda-lounge/*
+              - Effect: Allow
+                Action: ssm:DescribeParameters
+                Resource: '*'
+
+Outputs:
+  RoleArn:
+    Description: Put this in GitHub as the repository variable AWS_ROLE_ARN
+    Value: !GetAtt DeployRole.Arn
