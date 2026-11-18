@@ -4,20 +4,29 @@ from jose import jwt # type: ignore
 from fastapi import HTTPException, status, Request # type: ignore
 from auth.models import User
 import bcrypt # type: ignore
+import boto3 # type: ignore
+from functools import lru_cache
 
-SECRET_KEY = os.getenv("SECRET_KEY")
 ALGORITHM = "HS256"
+
+@lru_cache(maxsize=1)
+def get_secret_key():
+    secret_key = os.getenv("SECRET_KEY")
+    if not secret_key:
+        client = boto3.client("secretsmanager")
+        secret_key = client.get_secret_value(SecretId=os.getenv("SECRET_ARN"))["SecretString"]
+    return secret_key
 
 def create_access_token(data: dict, expires_delta: timedelta = timedelta(minutes=30)):
     to_encode = data.copy()
     expire = datetime.utcnow() + expires_delta
     to_encode.update({"exp": expire})
-    encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
+    encoded_jwt = jwt.encode(to_encode, get_secret_key(), algorithm=ALGORITHM)
     return encoded_jwt
 
 def verify_token(token: str):
     try:
-        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        payload = jwt.decode(token, get_secret_key(), algorithms=[ALGORITHM])
         username: str = payload.get("sub")
         if username is None:
             raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")

@@ -1,6 +1,6 @@
 AWSTemplateFormatVersion: '2010-09-09'
 Transform: AWS::Serverless-2016-10-31
-Description: chatapp-serverless
+Description: lambda-lounge - serverless chat on API Gateway, Lambda and DynamoDB
 
 Resources:
   ChatApiGateway:
@@ -11,19 +11,61 @@ Resources:
         AllowOrigin: '''*'''
         AllowMethods: '''GET,POST,OPTIONS'''
 
+  UsersTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: username
+          AttributeType: S
+      KeySchema:
+        - AttributeName: username
+          KeyType: HASH
+
+  MessagesTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: room
+          AttributeType: S
+        - AttributeName: timestamp
+          AttributeType: N
+      KeySchema:
+        - AttributeName: room
+          KeyType: HASH
+        - AttributeName: timestamp
+          KeyType: RANGE
+
+  JwtSecret:
+    Type: AWS::SecretsManager::Secret
+    Properties:
+      Description: JWT signing key for lambda-lounge (generated, never leaves AWS)
+      GenerateSecretString:
+        PasswordLength: 64
+        ExcludePunctuation: true
+
   ChatApi:
     Type: AWS::Serverless::Function
     Properties:
       Handler: app.lambda_handler
       Runtime: python3.12
       CodeUri: .
-      Timeout: 60
+      MemorySize: 256
+      Timeout: 30
       Policies:
         - AWSLambdaBasicExecutionRole
+        - DynamoDBCrudPolicy:
+            TableName: !Ref UsersTable
+        - DynamoDBCrudPolicy:
+            TableName: !Ref MessagesTable
+        - AWSSecretsManagerGetSecretValuePolicy:
+            SecretArn: !Ref JwtSecret
       Environment:
         Variables:
-          MONGODB_URL: !Sub '{{resolve:ssm:Parameter_MONGODB_URL}}'
-          SECRET_KEY: !Sub '{{resolve:ssm:Parameter_SECRET_KEY}}'
+          USERS_TABLE: !Ref UsersTable
+          MESSAGES_TABLE: !Ref MessagesTable
+          SECRET_ARN: !Ref JwtSecret
       Events:
         ApiGateway:
           Type: Api
@@ -35,4 +77,4 @@ Resources:
 Outputs:
   ApiUrl:
     Description: API Gateway URL for the Chat App
-    Value: !Sub https://${ChatApiGateway}.execute-api.eu-west-1.amazonaws.com/Prod/login
+    Value: !Sub https://${ChatApiGateway}.execute-api.${AWS::Region}.amazonaws.com/Prod/login

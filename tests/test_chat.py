@@ -27,3 +27,21 @@ def test_logout_clears_access(client):
     client.post("/token", data=CREDS)
     client.post("/logout")
     assert client.get("/messages").status_code == 401
+
+
+def test_messages_are_ordered_oldest_to_newest(client):
+    client.post("/register", data=CREDS)
+    client.post("/token", data=CREDS)
+    for text in ("one", "two", "three"):
+        client.post("/messages", json={"content": text})
+    assert [m["messagecontent"] for m in client.get("/messages").json()] == ["one", "two", "three"]
+
+
+def test_messages_returns_only_latest_page(client):
+    client.post("/register", data=CREDS)
+    client.post("/token", data=CREDS)
+    for i in range(105):
+        client.post("/messages", json={"content": str(i)})
+    msgs = client.get("/messages").json()
+    assert len(msgs) == 100
+    assert msgs[-1]["messagecontent"] == "104"

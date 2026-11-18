@@ -1,5 +1,6 @@
 -r requirements.txt
+boto3
 uvicorn[standard]
 pytest
 httpx
-mongomock
+moto[dynamodb,secretsmanager]

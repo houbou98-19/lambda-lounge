@@ -1,15 +1,8 @@
-# Chatapp-serverless
+# Lambda-lounge
 
-Latest API generated: 
-https://wnb5opgi1b.execute-api.eu-west-1.amazonaws.com/Prod/login
+This is a serverless chat-application that works mostly as a proof of concept for creating a webserver with all it's routes be hosted as serverless instead of having a server idly running. It uses API Gateway, Lambda (FastAPI with Mangum) and DynamoDB, and the secret for the access tokens is generated in Secrets Manager.
 
-This is a serverless chat-application that works mostly as a proof of concept for creating a webserver with all it's routes be hosted as serverless instead of having a server idly running.  
-
-To use the SAM CLI in this project, you need the following tools.
-
-- SAM CLI (With AWS CLI) - [Install the SAM CLI](https://docs.aws.amazon.com/serverless-application-model/latest/developerguide/serverless-sam-cli-install.html)
-- [Python 3.12 installed](https://www.python.org/downloads/)
-- Docker - [Install Docker community edition](https://hub.docker.com/)
+It started out as my degree project [chatapp-serverless](https://github.com/houbou98-19/chatapp-serverless) (tag `thesis-final`) which used MongoDB Atlas. This version uses DynamoDB instead.
 
 ## Local development (no Docker needed)
 
@@ -17,50 +10,22 @@ To use the SAM CLI in this project, you need the following tools.
 python -m venv .venv
 .venv/Scripts/activate        # Windows (Linux/macOS: source .venv/bin/activate)
 pip install -r requirements-dev.txt
-cp .env.example .env          # then fill in MONGODB_URL and SECRET_KEY
-python dev.py                 # http://127.0.0.1:8000/login (auto-reload)
-pytest                        # tests run against an in-memory mongomock
+python dev.py                 # http://127.0.0.1:8000/login (fake DynamoDB, data is lost when you stop it)
+pytest
 ```
 
-## Build
+## Deploy to AWS
 
-To build and test your application for the first time, run the following in your shell (env variable needs to have MongoDB_URI pointing to a mongodb cluster and SECRET_KEY needs to be a secret key for access token creation):
+You need the AWS CLI (configured) and SAM CLI. The stack creates its own tables and secret so there is nothing to put in SSM anymore.
 
 ```bash
 sam build --use-container
+sam deploy --guided      # first time; later just `sam deploy`
 ```
 
-To run it locally run the following command
-
-## Deploy
-
-### Local
-
-```bash
-sam local start-api --env-vars env.json
-```
-
-### Prod
-
-To Deploy it run the following command
-
-```bash
-sam deploy --guided
-```
-
-**Important** AWS needs to have your MongoDB_URI set on AWS SSM by running the commands
-
-```bash
-aws ssm put-parameter --name "Parameter_MONGODB_URL" --value "<MONGO_DB_URL>" --type "String" --overwrite
-```
-
-```bash
-aws ssm put-parameter --name "Parameter_SECRET_KEY" --value "<SECRET_KEY>" --type "String" --overwrite
-```
+The API url is printed as an output when it is done.
 
 ## Cleanup
-
-To take down the serverless application from AWS, run the following code in the terminal that you deployed
 
 ```bash
 sam delete

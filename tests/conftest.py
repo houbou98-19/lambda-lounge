@@ -1,22 +1,26 @@
 import os
+import pytest # type: ignore
+from moto import mock_aws # type: ignore
 
-import mongomock
-import pytest
+os.environ["SECRET_KEY"] = "test-secret"
+os.environ["USERS_TABLE"] = "users"
+os.environ["MESSAGES_TABLE"] = "messages"
+os.environ["AWS_DEFAULT_REGION"] = "eu-west-1"
+os.environ["AWS_ACCESS_KEY_ID"] = "testing"
+os.environ["AWS_SECRET_ACCESS_KEY"] = "testing"
 
-os.environ.setdefault("SECRET_KEY", "test-secret")
-os.environ.setdefault("MONGODB_URL", "mongodb://unused")
-
+from database import dynamo
+from database.local import create_tables
 
 @pytest.fixture(autouse=True)
-def fake_mongo(monkeypatch):
-    client = mongomock.MongoClient()
-    monkeypatch.setattr("database.connection.connect_to_mongo", lambda: client)
-    yield client
-
+def fake_dynamodb():
+    with mock_aws():
+        dynamo.connect_to_dynamodb.cache_clear()
+        create_tables()
+        yield
 
 @pytest.fixture
 def client():
-    from fastapi.testclient import TestClient
+    from fastapi.testclient import TestClient # type: ignore
     from app import app
-
-    return TestClient(app, base_url="https://testserver")  # cookies are Secure
+    return TestClient(app, base_url="https://testserver")

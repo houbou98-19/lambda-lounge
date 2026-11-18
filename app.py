@@ -3,7 +3,6 @@ from fastapi.staticfiles import StaticFiles # type: ignore
 from mangum import Mangum   # type: ignore
 from auth.routes import router as auth_router   # type: ignore
 from chat.routes import router as chat_router   # type: ignore
-from database.connection import connect_to_mongo    # type: ignore
 
 app = FastAPI()
 

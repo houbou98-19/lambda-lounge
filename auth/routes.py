@@ -2,26 +2,26 @@ from fastapi import APIRouter, Depends, HTTPException, Response, status # type: 
 from fastapi.responses import FileResponse # type: ignore
 from fastapi.security import OAuth2PasswordRequestForm # type: ignore
 from auth.utils import create_access_token, verify_password, hash_password # type: ignore
-from database.connection import get_collection # type: ignore
+from database.dynamo import get_table # type: ignore
 import os
 
 router = APIRouter()
 
 @router.post("/register")
 async def register_user(form_data: OAuth2PasswordRequestForm = Depends()):
-    collection = get_collection("users")
-    if collection.find_one({"username": form_data.username}):
+    collection = get_table("USERS_TABLE")
+    if collection.get_item(Key={"username": form_data.username}).get("Item"):
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Username already exists")
 
     hashed_password = hash_password(form_data.password)
-    collection.insert_one({"username": form_data.username, "password": hashed_password})
+    collection.put_item(Item={"username": form_data.username, "password": hashed_password})
 
     return {"message": "User registered successfully"}
 
 @router.post("/token")
 async def login(response: Response, form_data: OAuth2PasswordRequestForm = Depends()):
-    collection = get_collection("users")
-    user = collection.find_one({"username": form_data.username})
+    collection = get_table("USERS_TABLE")
+    user = collection.get_item(Key={"username": form_data.username}).get("Item")
     
     if not user or not verify_password(form_data.password, user["password"]):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Incorrect username or password")
