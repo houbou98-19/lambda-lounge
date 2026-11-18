@@ -1,13 +1,14 @@
-from pymongo import MongoClient
 import os
+from functools import lru_cache
 
-mongodb_url = os.getenv("MONGODB_URL")
+from pymongo import MongoClient  # type: ignore
 
-def connect_to_mongo():
-    client = MongoClient(mongodb_url)
-    return client
+
+@lru_cache(maxsize=1)
+def connect_to_mongo() -> MongoClient:
+    """Return one shared client per process (reused across warm Lambda invocations)."""
+    return MongoClient(os.getenv("MONGODB_URL"))
+
 
 def get_collection(collection_name: str):
-    client = connect_to_mongo()
-    db = client["Chats"]
-    return db[collection_name]
+    return connect_to_mongo()["Chats"][collection_name]

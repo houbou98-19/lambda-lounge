@@ -273,6 +273,3 @@ samconfig.toml
 
 #events
 events/
-
-#tests
-tests/

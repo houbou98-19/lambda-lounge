@@ -11,6 +11,17 @@ To use the SAM CLI in this project, you need the following tools.
 - [Python 3.12 installed](https://www.python.org/downloads/)
 - Docker - [Install Docker community edition](https://hub.docker.com/)
 
+## Local development (no Docker needed)
+
+```bash
+python -m venv .venv
+.venv/Scripts/activate        # Windows (Linux/macOS: source .venv/bin/activate)
+pip install -r requirements-dev.txt
+cp .env.example .env          # then fill in MONGODB_URL and SECRET_KEY
+python dev.py                 # http://127.0.0.1:8000/login (auto-reload)
+pytest                        # tests run against an in-memory mongomock
+```
+
 ## Build
 
 To build and test your application for the first time, run the following in your shell (env variable needs to have MongoDB_URI pointing to a mongodb cluster and SECRET_KEY needs to be a secret key for access token creation):
