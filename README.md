@@ -2,7 +2,7 @@
 
 A real-time chat that runs completely on AWS serverless services. There is no server to run or patch, and when nobody is chatting it costs next to nothing.
 
-Live demo: https://58tw0bqtu2.execute-api.eu-west-1.amazonaws.com/Prod/login
+Live demo: https://lambda.houbou.se/login
 
 Want to try it? Log in with the tester account (username `tester`, password `lambdalounge`), or register your own. Open it in two windows and send a message in one of them, it shows up in the other one straight away.
 
