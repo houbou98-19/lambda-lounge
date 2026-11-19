@@ -43,9 +43,18 @@ jobs:
       - name: Deploy
         env:
           ALERT_EMAIL: ${{ vars.ALERT_EMAIL }}
+          CUSTOM_DOMAIN: ${{ vars.CUSTOM_DOMAIN }}
+          CUSTOM_DOMAIN_CERT_ARN: ${{ vars.CUSTOM_DOMAIN_CERT_ARN }}
         run: |
+          PARAMS=""
+          if [ -n "$ALERT_EMAIL" ]; then
+            PARAMS="$PARAMS AlertEmail=$ALERT_EMAIL"
+          fi
+          if [ -n "$CUSTOM_DOMAIN" ] && [ -n "$CUSTOM_DOMAIN_CERT_ARN" ]; then
+            PARAMS="$PARAMS DomainName=$CUSTOM_DOMAIN CertificateArn=$CUSTOM_DOMAIN_CERT_ARN"
+          fi
           sam deploy --stack-name lambda-lounge --resolve-s3 --capabilities CAPABILITY_IAM --no-confirm-changeset --no-fail-on-empty-changeset \
-            ${ALERT_EMAIL:+--parameter-overrides AlertEmail=$ALERT_EMAIL}
+            ${PARAMS:+--parameter-overrides $PARAMS}
 
       - name: Put the api url in the README
         run: |

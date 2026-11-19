@@ -85,6 +85,8 @@ Then add the role arn (printed as an output) as a repository variable called `AW
 gh variable set ALERT_EMAIL --body "you@example.com"
 ```
 
+**Custom domain.** To serve the app from your own domain instead of the `execute-api` address, request an ACM certificate for it in the same region (DNS validation), and set the repository variables `CUSTOM_DOMAIN` and `CUSTOM_DOMAIN_CERT_ARN`. The next deploy creates an API Gateway custom domain and prints a `CustomDomainTarget` output, point a CNAME record for your domain at that. The live demo link then uses the domain.
+
 To deploy by hand you can still run `sam build` and `sam deploy`, and `sam delete` takes everything down.
 
 ## Running it

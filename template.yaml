@@ -7,9 +7,20 @@ Parameters:
     Type: String
     Default: ''
     Description: Where alarm and budget emails go. Leave empty to skip them
+  DomainName:
+    Type: String
+    Default: ''
+    Description: Custom domain for the app, for example lambda.example.com. Leave empty to use the default API Gateway address
+  CertificateArn:
+    Type: String
+    Default: ''
+    Description: ACM certificate for the custom domain, it has to be issued and in the same region as this stack
 
 Conditions:
   HasAlertEmail: !Not [!Equals [!Ref AlertEmail, '']]
+  HasCustomDomain: !And
+    - !Not [!Equals [!Ref DomainName, '']]
+    - !Not [!Equals [!Ref CertificateArn, '']]
 
 Globals:
   Function:
@@ -35,6 +46,28 @@ Resources:
       Cors:
         AllowOrigin: '''*'''
         AllowMethods: '''GET,POST,OPTIONS'''
+
+  # Only created when DomainName and CertificateArn are set. The domain then needs a CNAME
+  # to the CustomDomainTarget output, so the app is reached without the /Prod in the address
+  CustomDomain:
+    Type: AWS::ApiGateway::DomainName
+    Condition: HasCustomDomain
+    Properties:
+      DomainName: !Ref DomainName
+      RegionalCertificateArn: !Ref CertificateArn
+      SecurityPolicy: TLS_1_2
+      EndpointConfiguration:
+        Types:
+          - REGIONAL
+
+  CustomDomainMapping:
+    Type: AWS::ApiGateway::BasePathMapping
+    Condition: HasCustomDomain
+    DependsOn: ChatApiGatewayProdStage
+    Properties:
+      DomainName: !Ref CustomDomain
+      RestApiId: !Ref ChatApiGateway
+      Stage: Prod
 
   UsersTable:
     Type: AWS::DynamoDB::Table
@@ -461,7 +494,14 @@ Resources:
 Outputs:
   ApiUrl:
     Description: API Gateway URL for the Chat App
-    Value: !Sub https://${ChatApiGateway}.execute-api.${AWS::Region}.amazonaws.com/Prod/login
+    Value: !If
+      - HasCustomDomain
+      - !Sub https://${DomainName}/login
+      - !Sub https://${ChatApiGateway}.execute-api.${AWS::Region}.amazonaws.com/Prod/login
+  CustomDomainTarget:
+    Condition: HasCustomDomain
+    Description: Point a CNAME record for the custom domain at this
+    Value: !GetAtt CustomDomain.RegionalDomainName
   WebSocketUrl:
     Description: Websocket API URL, browsers get new messages from here
     Value: !Sub wss://${WebSocketApi}.execute-api.${AWS::Region}.amazonaws.com/Prod
