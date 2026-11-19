@@ -30,6 +30,17 @@ Then add the role arn (printed as an output) as a repository variable called `AW
 
 To deploy by hand instead you can still run `sam build` and `sam deploy`.
 
+## Monitoring
+
+- Logs are JSON in the log group `/lambda-lounge/api` and are kept for 14 days.
+- X-Ray tracing is on for both API Gateway and Lambda.
+- The API is throttled to 5 requests per second (burst 10).
+- CloudWatch alarms for Lambda errors, API 5xx and slow requests, plus a 5 USD monthly budget alert, all send mail to an SNS topic. To get the mails set the repository variable `ALERT_EMAIL` and confirm the subscription mail from AWS:
+
+```bash
+gh variable set ALERT_EMAIL --body "you@example.com"
+```
+
 ## Cleanup
 
 ```bash
