@@ -9,11 +9,35 @@ function showMessage(msg) {
     if (!messageContainer.querySelector(".message")) {
         messageContainer.innerHTML = ""; // removes the "No messages" text
     }
+    const atBottom = messageContainer.scrollHeight - messageContainer.scrollTop - messageContainer.clientHeight < 80;
+
+    const sentAt = new Date(Number(BigInt(msg.timestamp) / 1000000n)); // the timestamp is in nanoseconds
     const msgElement = document.createElement("div");
     msgElement.className = "message";
-    msgElement.textContent = `${msg.username}: ${msg.messagecontent}`;
+    const timeElement = document.createElement("span");
+    timeElement.className = "time";
+    timeElement.textContent = `[${sentAt.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}]`;
+    const userElement = document.createElement("span");
+    userElement.className = "user";
+    userElement.textContent = `${msg.username}:`;
+    const textElement = document.createElement("span");
+    textElement.className = "text";
+    textElement.textContent = msg.messagecontent;
+    msgElement.append(timeElement, userElement, textElement);
     messageContainer.appendChild(msgElement);
     lastTimestamp = BigInt(msg.timestamp);
+
+    if (atBottom) {
+        messageContainer.scrollTop = messageContainer.scrollHeight; // stay on the newest message
+    }
+}
+
+function setStatus(status) {
+    const statusElement = document.getElementById("status");
+    if (statusElement) {
+        statusElement.textContent = status;
+        statusElement.className = `status ${status}`;
+    }
 }
 
 async function fetchMessages() {
@@ -25,12 +49,16 @@ async function fetchMessages() {
 
         const messages = await response.json();
         const messageContainer = document.getElementById("messages");
+        const wasAtBottom = messageContainer.scrollHeight - messageContainer.scrollTop - messageContainer.clientHeight < 80;
+        const oldScroll = messageContainer.scrollTop;
         messageContainer.innerHTML = "";
 
         if (messages.length === 0) {
-            messageContainer.textContent = "No messages to display.";
+            messageContainer.textContent = "no messages yet";
         } else {
             messages.forEach(msg => showMessage(msg));
+            // keeps the place when someone is reading older messages
+            messageContainer.scrollTop = wasAtBottom ? messageContainer.scrollHeight : oldScroll;
         }
     } catch (error) {
         console.error("Error fetching messages:", error);
@@ -42,6 +70,7 @@ async function connectWebSocket() {
     try {
         const response = await fetch(`${envPath}/ws-token`);
         if (response.status === 404) {
+            setStatus("polling");
             return; // no websocket here (running locally), the polling keeps working
         }
         if (!response.ok) {
@@ -50,7 +79,10 @@ async function connectWebSocket() {
 
         const { ticket, url } = await response.json();
         socket = new WebSocket(`${url}?ticket=${ticket}`);
-        socket.onopen = () => fetchMessages(); // catches up on what was missed
+        socket.onopen = () => {
+            setStatus("online");
+            fetchMessages(); // catches up on what was missed
+        };
         socket.onmessage = (event) => {
             const msg = JSON.parse(event.data);
             if (BigInt(msg.timestamp) > lastTimestamp) {
@@ -59,10 +91,12 @@ async function connectWebSocket() {
         };
         socket.onclose = () => {
             socket = null;
+            setStatus("polling");
             setTimeout(connectWebSocket, 5000);
         };
     } catch (error) {
         console.error("Error connecting websocket:", error);
+        setStatus("polling");
         setTimeout(connectWebSocket, 5000);
     }
 }
@@ -85,6 +119,10 @@ async function postMessage(event) {
         if (!response.ok) {
             const error = await response.json();
             throw new Error(error.detail || "Failed to post the message");
+        }
+
+        if (!socket || socket.readyState !== WebSocket.OPEN) {
+            fetchMessages(); // no websocket to tell us about it, so look right away
         }
     } catch (error) {
         console.error("Error posting message:", error);
@@ -110,8 +148,22 @@ async function loginUser(event) {
         const redirectUrl = window.location.origin + envPath + "/chat";
         window.location.href = redirectUrl;
     } else {
-        alert("Invalid username or password");
+        showAuthMessage("wrong username or password", "error");
     }
+}
+
+function showAuthMessage(text, type) {
+    const messageElement = document.getElementById("auth-message");
+    messageElement.textContent = text;
+    messageElement.className = `auth-message ${type}`;
+    messageElement.hidden = false;
+}
+
+function showForm(name) {
+    document.getElementById("login-section").hidden = name !== "login";
+    document.getElementById("register-section").hidden = name !== "register";
+    document.getElementById("auth-message").hidden = true;
+    document.getElementById(`${name}-username`).focus();
 }
 
 async function logoutUser() {
@@ -140,11 +192,16 @@ async function registerUser(event) {
     });
 
     if (response.ok) {
-        alert("Registration successful! You can now log in.");
         document.getElementById("register-form").reset(); // Clear form
+        showForm("login");
+        document.getElementById("login-username").value = username;
+        document.getElementById("login-password").value = "";
+        document.getElementById("login-password").focus();
+        showAuthMessage("account created, you can log in now", "success");
     } else {
         const error = await response.json();
-        alert(`Registration failed: ${error.detail}`);
+        const reason = typeof error.detail === "string" ? error.detail : "check your username and password";
+        showAuthMessage(`registration failed: ${reason}`, "error");
     }
 }
 
@@ -171,6 +228,11 @@ document.addEventListener("DOMContentLoaded", () => {
     const registerForm = document.getElementById("register-form");
     if (registerForm) {
         registerForm.addEventListener("submit", registerUser);
+        document.getElementById("show-register").addEventListener("click", () => showForm("register"));
+        document.getElementById("show-login").addEventListener("click", () => showForm("login"));
+        if (window.location.hash === "#register") {
+            showForm("register"); // so a link can open the register form directly
+        }
     }
 
     const logoutButton = document.getElementById("logout-btn");
