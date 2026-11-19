@@ -11,6 +11,15 @@ Parameters:
 Conditions:
   HasAlertEmail: !Not [!Equals [!Ref AlertEmail, '']]
 
+Globals:
+  Function:
+    Runtime: python3.12
+    CodeUri: .
+    MemorySize: 256
+    Timeout: 30
+    Tracing: Active
+    PermissionsBoundary: !Sub arn:aws:iam::${AWS::AccountId}:policy/lambda-lounge-boundary
+
 Resources:
   ChatApiGateway:
     Type: AWS::Serverless::Api
@@ -42,6 +51,8 @@ Resources:
     Type: AWS::DynamoDB::Table
     Properties:
       BillingMode: PAY_PER_REQUEST
+      StreamSpecification:
+        StreamViewType: NEW_IMAGE
       AttributeDefinitions:
         - AttributeName: room
           AttributeType: S
@@ -53,22 +64,33 @@ Resources:
         - AttributeName: timestamp
           KeyType: RANGE
 
+  StatsTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: username
+          AttributeType: S
+      KeySchema:
+        - AttributeName: username
+          KeyType: HASH
+
   ApiLogGroup:
     Type: AWS::Logs::LogGroup
     Properties:
       LogGroupName: /lambda-lounge/api
       RetentionInDays: 14
 
+  WorkersLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: /lambda-lounge/workers
+      RetentionInDays: 14
+
   ChatApi:
     Type: AWS::Serverless::Function
     Properties:
       Handler: app.lambda_handler
-      Runtime: python3.12
-      CodeUri: .
-      MemorySize: 256
-      PermissionsBoundary: !Sub arn:aws:iam::${AWS::AccountId}:policy/lambda-lounge-boundary
-      Timeout: 30
-      Tracing: Active
       LoggingConfig:
         LogFormat: JSON
         ApplicationLogLevel: INFO
@@ -79,12 +101,15 @@ Resources:
             TableName: !Ref UsersTable
         - DynamoDBCrudPolicy:
             TableName: !Ref MessagesTable
+        - DynamoDBReadPolicy:
+            TableName: !Ref StatsTable
         - SSMParameterReadPolicy:
             ParameterName: lambda-lounge/secret-key
       Environment:
         Variables:
           USERS_TABLE: !Ref UsersTable
           MESSAGES_TABLE: !Ref MessagesTable
+          STATS_TABLE: !Ref StatsTable
           SECRET_PARAMETER: /lambda-lounge/secret-key
       Events:
         ApiGateway:
@@ -93,6 +118,102 @@ Resources:
             RestApiId: !Ref ChatApiGateway
             Path: /{proxy+}
             Method: ANY
+
+  # New messages -> stream -> StreamProcessor -> event bus -> queue -> StatsConsumer -> stats table
+  MessageBus:
+    Type: AWS::Events::EventBus
+    Properties:
+      Name: !Sub ${AWS::StackName}-bus
+
+  StreamProcessor:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: workers.stream_processor.lambda_handler
+      LoggingConfig:
+        LogFormat: JSON
+        ApplicationLogLevel: INFO
+        LogGroup: !Ref WorkersLogGroup
+      Policies:
+        - EventBridgePutEventsPolicy:
+            EventBusName: !Ref MessageBus
+      Environment:
+        Variables:
+          EVENT_BUS: !Ref MessageBus
+      Events:
+        MessagesStream:
+          Type: DynamoDB
+          Properties:
+            Stream: !GetAtt MessagesTable.StreamArn
+            StartingPosition: LATEST
+            BatchSize: 10
+            MaximumRetryAttempts: 3
+            BisectBatchOnFunctionError: true
+
+  MessageEventsDlq:
+    Type: AWS::SQS::Queue
+    Properties:
+      MessageRetentionPeriod: 1209600
+
+  MessageEventsQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      VisibilityTimeout: 180
+      RedrivePolicy:
+        deadLetterTargetArn: !GetAtt MessageEventsDlq.Arn
+        maxReceiveCount: 3
+
+  MessagePostedRule:
+    Type: AWS::Events::Rule
+    Properties:
+      EventBusName: !Ref MessageBus
+      EventPattern:
+        source:
+          - lambda-lounge.chat
+        detail-type:
+          - MessagePosted
+      Targets:
+        - Id: message-events-queue
+          Arn: !GetAtt MessageEventsQueue.Arn
+
+  MessageEventsQueuePolicy:
+    Type: AWS::SQS::QueuePolicy
+    Properties:
+      Queues:
+        - !Ref MessageEventsQueue
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: events.amazonaws.com
+            Action: sqs:SendMessage
+            Resource: !GetAtt MessageEventsQueue.Arn
+            Condition:
+              ArnEquals:
+                aws:SourceArn: !GetAtt MessagePostedRule.Arn
+
+  StatsConsumer:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: workers.stats_consumer.lambda_handler
+      LoggingConfig:
+        LogFormat: JSON
+        ApplicationLogLevel: INFO
+        LogGroup: !Ref WorkersLogGroup
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref StatsTable
+      Environment:
+        Variables:
+          STATS_TABLE: !Ref StatsTable
+      Events:
+        MessageEvents:
+          Type: SQS
+          Properties:
+            Queue: !GetAtt MessageEventsQueue.Arn
+            BatchSize: 10
+            FunctionResponseTypes:
+              - ReportBatchItemFailures
 
   AlertTopic:
     Type: AWS::SNS::Topic
@@ -156,6 +277,24 @@ Resources:
       Period: 300
       EvaluationPeriods: 2
       Threshold: 10000
+      ComparisonOperator: GreaterThanThreshold
+      TreatMissingData: notBreaching
+      AlarmActions:
+        - !Ref AlertTopic
+
+  DeadLetterQueueAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmDescription: Message events could not be processed and ended up in the dead letter queue
+      Namespace: AWS/SQS
+      MetricName: ApproximateNumberOfMessagesVisible
+      Dimensions:
+        - Name: QueueName
+          Value: !GetAtt MessageEventsDlq.QueueName
+      Statistic: Maximum
+      Period: 300
+      EvaluationPeriods: 1
+      Threshold: 0
       ComparisonOperator: GreaterThanThreshold
       TreatMissingData: notBreaching
       AlarmActions:

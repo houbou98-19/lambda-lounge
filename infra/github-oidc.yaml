@@ -67,6 +67,25 @@ Resources:
               - xray:PutTraceSegments
               - xray:PutTelemetryRecords
             Resource: '*'
+          - Effect: Allow
+            Action:
+              - dynamodb:DescribeStream
+              - dynamodb:GetRecords
+              - dynamodb:GetShardIterator
+            Resource: !Sub arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/lambda-lounge-*/stream/*
+          - Effect: Allow
+            Action: dynamodb:ListStreams
+            Resource: '*'
+          - Effect: Allow
+            Action: events:PutEvents
+            Resource: !Sub arn:aws:events:${AWS::Region}:${AWS::AccountId}:event-bus/lambda-lounge-*
+          - Effect: Allow
+            Action:
+              - sqs:ReceiveMessage
+              - sqs:DeleteMessage
+              - sqs:GetQueueAttributes
+              - sqs:ChangeMessageVisibility
+            Resource: !Sub arn:aws:sqs:${AWS::Region}:${AWS::AccountId}:lambda-lounge-*
 
   DeployRole:
     Type: AWS::IAM::Role
@@ -218,6 +237,42 @@ Resources:
                   - sns:UntagResource
                   - sns:ListTagsForResource
                 Resource: !Sub arn:aws:sns:${AWS::Region}:${AWS::AccountId}:lambda-lounge-*
+              - Effect: Allow
+                Action:
+                  - events:CreateEventBus
+                  - events:DeleteEventBus
+                  - events:DescribeEventBus
+                  - events:PutRule
+                  - events:DeleteRule
+                  - events:DescribeRule
+                  - events:PutTargets
+                  - events:RemoveTargets
+                  - events:ListTargetsByRule
+                  - events:TagResource
+                  - events:UntagResource
+                  - events:ListTagsForResource
+                Resource:
+                  - !Sub arn:aws:events:${AWS::Region}:${AWS::AccountId}:event-bus/lambda-lounge-*
+                  - !Sub arn:aws:events:${AWS::Region}:${AWS::AccountId}:rule/lambda-lounge-*/*
+              - Effect: Allow
+                Action:
+                  - sqs:CreateQueue
+                  - sqs:DeleteQueue
+                  - sqs:GetQueueAttributes
+                  - sqs:SetQueueAttributes
+                  - sqs:GetQueueUrl
+                  - sqs:TagQueue
+                  - sqs:UntagQueue
+                  - sqs:ListQueueTags
+                Resource: !Sub arn:aws:sqs:${AWS::Region}:${AWS::AccountId}:lambda-lounge-*
+              # Event source mappings have no name to scope on, they can only be limited to these actions
+              - Effect: Allow
+                Action:
+                  - lambda:CreateEventSourceMapping
+                  - lambda:UpdateEventSourceMapping
+                  - lambda:DeleteEventSourceMapping
+                  - lambda:GetEventSourceMapping
+                Resource: '*'
               - Effect: Allow
                 Action:
                   - budgets:ViewBudget

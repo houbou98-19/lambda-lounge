@@ -1,3 +1,4 @@
+import boto3 # type: ignore
 CREDS = {"username": "Mark", "password": "pw12345"}
 
 
@@ -45,3 +46,16 @@ def test_messages_returns_only_latest_page(client):
     msgs = client.get("/messages").json()
     assert len(msgs) == 100
     assert msgs[-1]["messagecontent"] == "104"
+
+
+def test_stats_require_auth(client):
+    assert client.get("/stats").status_code == 401
+
+
+def test_stats_returns_top_users(client, fake_dynamodb):
+    client.post("/register", data=CREDS)
+    client.post("/token", data=CREDS)
+    stats = boto3.resource("dynamodb").Table("stats")
+    stats.put_item(Item={"username": "alice", "message_count": 3})
+    stats.put_item(Item={"username": "bob", "message_count": 7})
+    assert client.get("/stats").json() == [{"username": "bob", "messages": 7}, {"username": "alice", "messages": 3}]
