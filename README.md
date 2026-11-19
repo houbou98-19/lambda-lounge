@@ -1,6 +1,6 @@
 # Lambda-lounge
 
-Latest API generated: not deployed yet
+Latest API generated: https://58tw0bqtu2.execute-api.eu-west-1.amazonaws.com/Prod/login
 
 This is a serverless chat-application that works mostly as a proof of concept for creating a webserver with all it's routes be hosted as serverless instead of having a server idly running. It uses API Gateway, Lambda (FastAPI with Mangum) and DynamoDB, and the secret for the access tokens is kept in SSM Parameter Store.
 
