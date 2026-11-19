@@ -26,6 +26,14 @@ async def post_message(message: Message, current_user: User = Depends(get_curren
     logger.info(f"Message posted by: {current_user.username}")
     return {"status": "Message posted successfully"}
 
+@router.get("/stats")
+async def get_stats(current_user: User = Depends(get_current_user)):
+    collection = get_table("STATS_TABLE")
+    users = collection.scan()["Items"]
+    stats = [{"username": u["username"], "messages": int(u["message_count"])} for u in users]
+    stats.sort(key=lambda s: s["messages"], reverse=True)
+    return JSONResponse(content=stats[:10])
+
 @router.get("/chat")
 async def read_chat_page():
     return FileResponse(os.path.join("static", "chat.html"))

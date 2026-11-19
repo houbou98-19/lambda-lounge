@@ -4,6 +4,7 @@ import os
 os.environ["SECRET_KEY"] = "local-secret"
 os.environ["USERS_TABLE"] = "users"
 os.environ["MESSAGES_TABLE"] = "messages"
+os.environ["STATS_TABLE"] = "stats"
 os.environ["AWS_DEFAULT_REGION"] = "eu-west-1"
 os.environ["AWS_ACCESS_KEY_ID"] = "local"
 os.environ["AWS_SECRET_ACCESS_KEY"] = "local"

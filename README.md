@@ -30,6 +30,17 @@ Then add the role arn (printed as an output) as a repository variable called `AW
 
 To deploy by hand instead you can still run `sam build` and `sam deploy`.
 
+## Events
+
+Every new message goes through an event flow, separate from the API:
+
+```
+messages table -> DynamoDB Stream -> Lambda -> EventBridge bus -> SQS queue -> Lambda -> stats table
+                                                                     \-> dead letter queue (after 3 tries)
+```
+
+The last Lambda counts messages for each user, and `GET /stats` returns the top 10. The code for the two workers is in `workers/`. Events are delivered at least once, so a count can in rare cases be too high. An alarm goes off if anything ends up in the dead letter queue. The stats stay empty when running with `python dev.py` since the fake DynamoDB has no streams.
+
 ## Monitoring
 
 - Logs are JSON in the log group `/lambda-lounge/api` and are kept for 14 days.
