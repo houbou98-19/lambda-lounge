@@ -5,10 +5,12 @@ from boto3.dynamodb.conditions import Key # type: ignore
 from database.dynamo import get_table # type: ignore
 from chat.models import Message # type: ignore
 from auth.models import User # type: ignore
+import logging
 import os
 import time
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 @router.get("/messages")
 async def get_messages(response: Response, current_user: User = Depends(get_current_user)):
@@ -21,6 +23,7 @@ async def get_messages(response: Response, current_user: User = Depends(get_curr
 async def post_message(message: Message, current_user: User = Depends(get_current_user)):
     collection = get_table("MESSAGES_TABLE")
     collection.put_item(Item={"room": "general", "timestamp": time.time_ns(), "username": current_user.username, "messagecontent": message.content})
+    logger.info(f"Message posted by: {current_user.username}")
     return {"status": "Message posted successfully"}
 
 @router.get("/chat")

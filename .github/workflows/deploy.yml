@@ -40,7 +40,12 @@ jobs:
           aws ssm put-parameter --name /lambda-lounge/secret-key --type SecureString --value "$(openssl rand -base64 48)"
 
       - run: sam build --use-container
-      - run: sam deploy --stack-name lambda-lounge --resolve-s3 --capabilities CAPABILITY_IAM --no-confirm-changeset --no-fail-on-empty-changeset
+      - name: Deploy
+        env:
+          ALERT_EMAIL: ${{ vars.ALERT_EMAIL }}
+        run: |
+          sam deploy --stack-name lambda-lounge --resolve-s3 --capabilities CAPABILITY_IAM --no-confirm-changeset --no-fail-on-empty-changeset \
+            ${ALERT_EMAIL:+--parameter-overrides AlertEmail=$ALERT_EMAIL}
 
       - name: Put the api url in the README
         run: |

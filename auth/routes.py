@@ -3,9 +3,11 @@ from fastapi.responses import FileResponse # type: ignore
 from fastapi.security import OAuth2PasswordRequestForm # type: ignore
 from auth.utils import create_access_token, verify_password, hash_password # type: ignore
 from database.dynamo import get_table # type: ignore
+import logging
 import os
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 @router.post("/register")
 async def register_user(form_data: OAuth2PasswordRequestForm = Depends()):
@@ -15,6 +17,7 @@ async def register_user(form_data: OAuth2PasswordRequestForm = Depends()):
 
     hashed_password = hash_password(form_data.password)
     collection.put_item(Item={"username": form_data.username, "password": hashed_password})
+    logger.info(f"User registered: {form_data.username}")
 
     return {"message": "User registered successfully"}
 
@@ -24,6 +27,7 @@ async def login(response: Response, form_data: OAuth2PasswordRequestForm = Depen
     user = collection.get_item(Key={"username": form_data.username}).get("Item")
     
     if not user or not verify_password(form_data.password, user["password"]):
+        logger.warning(f"Failed login for: {form_data.username}")
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Incorrect username or password")
 
     access_token = create_access_token(data={"sub": form_data.username})
