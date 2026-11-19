@@ -12,7 +12,7 @@ def lambda_handler(event, context):
         if record["eventName"] != "INSERT":
             continue
         message = record["dynamodb"]["NewImage"]
-        detail = {"room": message["room"]["S"], "username": message["username"]["S"], "timestamp": message["timestamp"]["N"]}
+        detail = {"room": message["room"]["S"], "username": message["username"]["S"], "timestamp": message["timestamp"]["N"], "messagecontent": message["messagecontent"]["S"]}
         entries.append({
             "Source": "lambda-lounge.chat",
             "DetailType": "MessagePosted",

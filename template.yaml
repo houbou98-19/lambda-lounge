@@ -75,6 +75,20 @@ Resources:
         - AttributeName: username
           KeyType: HASH
 
+  ConnectionsTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      BillingMode: PAY_PER_REQUEST
+      TimeToLiveSpecification:
+        AttributeName: expires
+        Enabled: true
+      AttributeDefinitions:
+        - AttributeName: connectionId
+          AttributeType: S
+      KeySchema:
+        - AttributeName: connectionId
+          KeyType: HASH
+
   ApiLogGroup:
     Type: AWS::Logs::LogGroup
     Properties:
@@ -111,6 +125,7 @@ Resources:
           MESSAGES_TABLE: !Ref MessagesTable
           STATS_TABLE: !Ref StatsTable
           SECRET_PARAMETER: /lambda-lounge/secret-key
+          WEBSOCKET_URL: !Sub wss://${WebSocketApi}.execute-api.${AWS::Region}.amazonaws.com/Prod
       Events:
         ApiGateway:
           Type: Api
@@ -215,6 +230,110 @@ Resources:
             FunctionResponseTypes:
               - ReportBatchItemFailures
 
+  # Websocket api: browsers connect with a short ticket (from GET /ws-token) and get new messages pushed
+  WebSocketApi:
+    Type: AWS::ApiGatewayV2::Api
+    Properties:
+      Name: lambda-lounge-ws
+      ProtocolType: WEBSOCKET
+      RouteSelectionExpression: $request.body.action
+
+  ConnectionHandler:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: workers.ws_connection.lambda_handler
+      LoggingConfig:
+        LogFormat: JSON
+        ApplicationLogLevel: INFO
+        LogGroup: !Ref WorkersLogGroup
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref ConnectionsTable
+        - SSMParameterReadPolicy:
+            ParameterName: lambda-lounge/secret-key
+      Environment:
+        Variables:
+          CONNECTIONS_TABLE: !Ref ConnectionsTable
+          SECRET_PARAMETER: /lambda-lounge/secret-key
+
+  ConnectionHandlerPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName: !Ref ConnectionHandler
+      Principal: apigateway.amazonaws.com
+      SourceArn: !Sub arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${WebSocketApi}/*
+
+  ConnectionIntegration:
+    Type: AWS::ApiGatewayV2::Integration
+    Properties:
+      ApiId: !Ref WebSocketApi
+      IntegrationType: AWS_PROXY
+      IntegrationUri: !Sub arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${ConnectionHandler.Arn}/invocations
+
+  ConnectRoute:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref WebSocketApi
+      RouteKey: $connect
+      AuthorizationType: NONE
+      Target: !Sub integrations/${ConnectionIntegration}
+
+  DisconnectRoute:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref WebSocketApi
+      RouteKey: $disconnect
+      Target: !Sub integrations/${ConnectionIntegration}
+
+  WebSocketDeployment:
+    Type: AWS::ApiGatewayV2::Deployment
+    DependsOn:
+      - ConnectRoute
+      - DisconnectRoute
+    Properties:
+      ApiId: !Ref WebSocketApi
+
+  WebSocketStage:
+    Type: AWS::ApiGatewayV2::Stage
+    Properties:
+      ApiId: !Ref WebSocketApi
+      StageName: Prod
+      DeploymentId: !Ref WebSocketDeployment
+      DefaultRouteSettings:
+        ThrottlingRateLimit: 5
+        ThrottlingBurstLimit: 10
+
+  Broadcaster:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: workers.broadcaster.lambda_handler
+      LoggingConfig:
+        LogFormat: JSON
+        ApplicationLogLevel: INFO
+        LogGroup: !Ref WorkersLogGroup
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref ConnectionsTable
+        - Statement:
+            - Effect: Allow
+              Action: execute-api:ManageConnections
+              Resource: !Sub arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${WebSocketApi}/Prod/POST/@connections/*
+      Environment:
+        Variables:
+          CONNECTIONS_TABLE: !Ref ConnectionsTable
+          WEBSOCKET_ENDPOINT: !Sub https://${WebSocketApi}.execute-api.${AWS::Region}.amazonaws.com/Prod
+      Events:
+        MessagePosted:
+          Type: EventBridgeRule
+          Properties:
+            EventBusName: !Ref MessageBus
+            Pattern:
+              source:
+                - lambda-lounge.chat
+              detail-type:
+                - MessagePosted
+
   AlertTopic:
     Type: AWS::SNS::Topic
 
@@ -300,6 +419,24 @@ Resources:
       AlarmActions:
         - !Ref AlertTopic
 
+  BroadcasterErrorsAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmDescription: New messages could not be sent to the connected browsers
+      Namespace: AWS/Lambda
+      MetricName: Errors
+      Dimensions:
+        - Name: FunctionName
+          Value: !Ref Broadcaster
+      Statistic: Sum
+      Period: 300
+      EvaluationPeriods: 1
+      Threshold: 0
+      ComparisonOperator: GreaterThanThreshold
+      TreatMissingData: notBreaching
+      AlarmActions:
+        - !Ref AlertTopic
+
   MonthlyBudget:
     Type: AWS::Budgets::Budget
     Condition: HasAlertEmail
@@ -325,3 +462,6 @@ Outputs:
   ApiUrl:
     Description: API Gateway URL for the Chat App
     Value: !Sub https://${ChatApiGateway}.execute-api.${AWS::Region}.amazonaws.com/Prod/login
+  WebSocketUrl:
+    Description: Websocket API URL, browsers get new messages from here
+    Value: !Sub wss://${WebSocketApi}.execute-api.${AWS::Region}.amazonaws.com/Prod

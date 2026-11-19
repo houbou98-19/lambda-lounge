@@ -16,6 +16,12 @@ def create_tables():
         BillingMode="PAY_PER_REQUEST"
     )
     dynamodb.create_table(
+        TableName=os.getenv("CONNECTIONS_TABLE"),
+        KeySchema=[{"AttributeName": "connectionId", "KeyType": "HASH"}],
+        AttributeDefinitions=[{"AttributeName": "connectionId", "AttributeType": "S"}],
+        BillingMode="PAY_PER_REQUEST"
+    )
+    dynamodb.create_table(
         TableName=os.getenv("MESSAGES_TABLE"),
         KeySchema=[
             {"AttributeName": "room", "KeyType": "HASH"},

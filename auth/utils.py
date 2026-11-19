@@ -24,11 +24,11 @@ def create_access_token(data: dict, expires_delta: timedelta = timedelta(minutes
     encoded_jwt = jwt.encode(to_encode, get_secret_key(), algorithm=ALGORITHM)
     return encoded_jwt
 
-def verify_token(token: str):
+def verify_token(token: str, scope: str = None):  # normal login tokens have no scope, websocket tickets have "ws"
     try:
         payload = jwt.decode(token, get_secret_key(), algorithms=[ALGORITHM])
         username: str = payload.get("sub")
-        if username is None:
+        if username is None or payload.get("scope") != scope:
             raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
         return User(username=username)
     except jwt.JWTError:
