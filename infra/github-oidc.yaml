@@ -22,6 +22,46 @@ Resources:
       ClientIdList:
         - sts.amazonaws.com
 
+  # Every role the pipeline creates gets capped by this, so it can never be more
+  # powerful than what the app itself needs
+  LambdaBoundary:
+    Type: AWS::IAM::ManagedPolicy
+    Properties:
+      ManagedPolicyName: lambda-lounge-boundary
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Action:
+              - logs:CreateLogGroup
+              - logs:CreateLogStream
+              - logs:PutLogEvents
+            Resource: '*'
+          - Effect: Allow
+            Action:
+              - dynamodb:GetItem
+              - dynamodb:PutItem
+              - dynamodb:UpdateItem
+              - dynamodb:DeleteItem
+              - dynamodb:Query
+              - dynamodb:Scan
+              - dynamodb:BatchGetItem
+              - dynamodb:BatchWriteItem
+              - dynamodb:ConditionCheckItem
+              - dynamodb:DescribeTable
+            Resource:
+              - !Sub arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/lambda-lounge-*
+              - !Sub arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/lambda-lounge-*/index/*
+          - Effect: Allow
+            Action:
+              - ssm:GetParameter
+              - ssm:GetParameters
+              - ssm:GetParametersByPath
+            Resource: !Sub arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/lambda-lounge/*
+          - Effect: Allow
+            Action: ssm:DescribeParameters
+            Resource: '*'
+
   DeployRole:
     Type: AWS::IAM::Role
     Properties:
@@ -43,45 +83,98 @@ Resources:
             Version: '2012-10-17'
             Statement:
               - Effect: Allow
-                Action: cloudformation:*
+                Action:
+                  - cloudformation:CreateChangeSet
+                  - cloudformation:DescribeChangeSet
+                  - cloudformation:ExecuteChangeSet
+                  - cloudformation:DeleteChangeSet
+                  - cloudformation:DescribeStacks
+                  - cloudformation:DescribeStackEvents
+                  - cloudformation:GetTemplateSummary
                 Resource:
                   - !Sub arn:aws:cloudformation:${AWS::Region}:${AWS::AccountId}:stack/lambda-lounge/*
-                  - !Sub arn:aws:cloudformation:${AWS::Region}:${AWS::AccountId}:stack/aws-sam-cli-managed-default/*
                   - !Sub arn:aws:cloudformation:${AWS::Region}:aws:transform/Serverless-2016-10-31
               - Effect: Allow
-                Action: s3:*
+                Action:
+                  - cloudformation:DescribeStacks
+                  - cloudformation:GetTemplateSummary
+                Resource: !Sub arn:aws:cloudformation:${AWS::Region}:${AWS::AccountId}:stack/aws-sam-cli-managed-default/*
+              - Effect: Allow
+                Action:
+                  - s3:PutObject
+                  - s3:GetObject
+                  - s3:ListBucket
+                  - s3:GetBucketLocation
                 Resource:
                   - arn:aws:s3:::aws-sam-cli-managed-default-*
                   - arn:aws:s3:::aws-sam-cli-managed-default-*/*
               - Effect: Allow
                 Action:
-                  - lambda:*
-                  - apigateway:*
-                Resource: '*'
-              - Effect: Allow
-                Action: dynamodb:*
-                Resource: !Sub arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/lambda-lounge-*
+                  - lambda:CreateFunction
+                  - lambda:DeleteFunction
+                  - lambda:GetFunction
+                  - lambda:GetFunctionConfiguration
+                  - lambda:UpdateFunctionCode
+                  - lambda:UpdateFunctionConfiguration
+                  - lambda:AddPermission
+                  - lambda:RemovePermission
+                  - lambda:GetPolicy
+                  - lambda:TagResource
+                  - lambda:UntagResource
+                  - lambda:ListTags
+                Resource: !Sub arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:lambda-lounge-*
               - Effect: Allow
                 Action:
-                  - iam:CreateRole
+                  - apigateway:GET
+                  - apigateway:POST
+                  - apigateway:PUT
+                  - apigateway:PATCH
+                  - apigateway:DELETE
+                Resource:
+                  - !Sub arn:aws:apigateway:${AWS::Region}::/restapis
+                  - !Sub arn:aws:apigateway:${AWS::Region}::/restapis/*
+                  - !Sub arn:aws:apigateway:${AWS::Region}::/tags/*
+              - Effect: Allow
+                Action:
+                  - dynamodb:CreateTable
+                  - dynamodb:DeleteTable
+                  - dynamodb:DescribeTable
+                  - dynamodb:UpdateTable
+                  - dynamodb:DescribeContinuousBackups
+                  - dynamodb:DescribeTimeToLive
+                  - dynamodb:ListTagsOfResource
+                  - dynamodb:TagResource
+                  - dynamodb:UntagResource
+                Resource: !Sub arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/lambda-lounge-*
+              # New roles must carry the boundary, and the boundary itself can't be changed or removed from here
+              - Effect: Allow
+                Action: iam:CreateRole
+                Resource: !Sub arn:aws:iam::${AWS::AccountId}:role/lambda-lounge-*
+                Condition:
+                  StringEquals:
+                    iam:PermissionsBoundary: !Ref LambdaBoundary
+              - Effect: Allow
+                Action:
                   - iam:DeleteRole
                   - iam:GetRole
-                  - iam:PassRole
+                  - iam:TagRole
                   - iam:AttachRolePolicy
                   - iam:DetachRolePolicy
                   - iam:PutRolePolicy
                   - iam:DeleteRolePolicy
                   - iam:GetRolePolicy
-                  - iam:TagRole
                 Resource: !Sub arn:aws:iam::${AWS::AccountId}:role/lambda-lounge-*
+              - Effect: Allow
+                Action: iam:PassRole
+                Resource: !Sub arn:aws:iam::${AWS::AccountId}:role/lambda-lounge-*
+                Condition:
+                  StringEquals:
+                    iam:PassedToService: lambda.amazonaws.com
               - Effect: Allow
                 Action:
                   - ssm:GetParameter
                   - ssm:PutParameter
                 Resource: !Sub arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/lambda-lounge/*
-              - Effect: Allow
-                Action: ssm:DescribeParameters
-                Resource: '*'
 
 Outputs:
   RoleArn:

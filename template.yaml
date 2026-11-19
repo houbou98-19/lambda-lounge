@@ -44,6 +44,7 @@ Resources:
       Runtime: python3.12
       CodeUri: .
       MemorySize: 256
+      PermissionsBoundary: !Sub arn:aws:iam::${AWS::AccountId}:policy/lambda-lounge-boundary
       Timeout: 30
       Policies:
         - AWSLambdaBasicExecutionRole
