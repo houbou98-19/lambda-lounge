@@ -2,9 +2,10 @@ AWSTemplateFormatVersion: '2010-09-09'
 Description: Lets GitHub Actions in houbou98-19/lambda-lounge deploy the lambda-lounge stack without access keys
 
 Parameters:
+  # GitHub puts the owner and repo ids in the token subject (see: gh api repos/<owner>/<repo>/actions/oidc/customization/sub)
   GitHubRepo:
     Type: String
-    Default: houbou98-19/lambda-lounge
+    Default: houbou98-19@54393014/lambda-lounge@1463455572
   ExistingOidcProviderArn:
     Type: String
     Default: ''
