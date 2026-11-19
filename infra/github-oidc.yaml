@@ -86,6 +86,9 @@ Resources:
               - sqs:GetQueueAttributes
               - sqs:ChangeMessageVisibility
             Resource: !Sub arn:aws:sqs:${AWS::Region}:${AWS::AccountId}:lambda-lounge-*
+          - Effect: Allow
+            Action: execute-api:ManageConnections
+            Resource: !Sub arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:*/Prod/POST/@connections/*
 
   DeployRole:
     Type: AWS::IAM::Role
@@ -158,6 +161,8 @@ Resources:
                 Resource:
                   - !Sub arn:aws:apigateway:${AWS::Region}::/restapis
                   - !Sub arn:aws:apigateway:${AWS::Region}::/restapis/*
+                  - !Sub arn:aws:apigateway:${AWS::Region}::/apis
+                  - !Sub arn:aws:apigateway:${AWS::Region}::/apis/*
                   - !Sub arn:aws:apigateway:${AWS::Region}::/tags/*
               - Effect: Allow
                 Action:
@@ -167,6 +172,7 @@ Resources:
                   - dynamodb:UpdateTable
                   - dynamodb:DescribeContinuousBackups
                   - dynamodb:DescribeTimeToLive
+                  - dynamodb:UpdateTimeToLive
                   - dynamodb:ListTagsOfResource
                   - dynamodb:TagResource
                   - dynamodb:UntagResource

@@ -1,6 +1,21 @@
 const match = window.location.pathname.match(/\/(Prod|Stage)/);
 const envPath = match ? match[0] : ""; 
 
+let socket = null;
+let lastTimestamp = 0n; // timestamp of the newest message on the screen
+
+function showMessage(msg) {
+    const messageContainer = document.getElementById("messages");
+    if (!messageContainer.querySelector(".message")) {
+        messageContainer.innerHTML = ""; // removes the "No messages" text
+    }
+    const msgElement = document.createElement("div");
+    msgElement.className = "message";
+    msgElement.textContent = `${msg.username}: ${msg.messagecontent}`;
+    messageContainer.appendChild(msgElement);
+    lastTimestamp = BigInt(msg.timestamp);
+}
+
 async function fetchMessages() {
     try {
         const response = await fetch(`${envPath}/messages`);
@@ -15,16 +30,40 @@ async function fetchMessages() {
         if (messages.length === 0) {
             messageContainer.textContent = "No messages to display.";
         } else {
-            messages.forEach(msg => {
-                const msgElement = document.createElement("div");
-                msgElement.className = "message";
-                msgElement.textContent = `${msg.username}: ${msg.messagecontent}`;
-                messageContainer.appendChild(msgElement);
-            });
+            messages.forEach(msg => showMessage(msg));
         }
     } catch (error) {
         console.error("Error fetching messages:", error);
         document.getElementById("messages").textContent = "Failed to load messages.";
+    }
+}
+
+async function connectWebSocket() {
+    try {
+        const response = await fetch(`${envPath}/ws-token`);
+        if (response.status === 404) {
+            return; // no websocket here (running locally), the polling keeps working
+        }
+        if (!response.ok) {
+            throw new Error(`HTTP error! Status: ${response.status}`);
+        }
+
+        const { ticket, url } = await response.json();
+        socket = new WebSocket(`${url}?ticket=${ticket}`);
+        socket.onopen = () => fetchMessages(); // catches up on what was missed
+        socket.onmessage = (event) => {
+            const msg = JSON.parse(event.data);
+            if (BigInt(msg.timestamp) > lastTimestamp) {
+                showMessage(msg);
+            }
+        };
+        socket.onclose = () => {
+            socket = null;
+            setTimeout(connectWebSocket, 5000);
+        };
+    } catch (error) {
+        console.error("Error connecting websocket:", error);
+        setTimeout(connectWebSocket, 5000);
     }
 }
 
@@ -116,7 +155,12 @@ document.addEventListener("DOMContentLoaded", () => {
     if (messageForm) {
         messageForm.addEventListener("submit", postMessage);
         fetchMessages();
-        setInterval(fetchMessages, 5000); // Refetch messages every 5 seconds
+        connectWebSocket();
+        setInterval(() => {
+            if (!socket || socket.readyState !== WebSocket.OPEN) {
+                fetchMessages(); // only needed when the websocket is not working
+            }
+        }, 5000);
     }
 
     const loginForm = document.getElementById("login-form");

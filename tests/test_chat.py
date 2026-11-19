@@ -20,7 +20,8 @@ def test_register_login_and_chat_flow(client):
 
     assert client.post("/messages", json={"content": "hello"}).status_code == 200
     msgs = client.get("/messages").json()
-    assert msgs == [{"username": "Mark", "messagecontent": "hello"}]
+    assert [(m["username"], m["messagecontent"]) for m in msgs] == [("Mark", "hello")]
+    assert msgs[0]["timestamp"].isdigit()
 
 
 def test_logout_clears_access(client):

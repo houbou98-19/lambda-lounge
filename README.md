@@ -41,6 +41,16 @@ messages table -> DynamoDB Stream -> Lambda -> EventBridge bus -> SQS queue -> L
 
 The last Lambda counts messages for each user, and `GET /stats` returns the top 10. The code for the two workers is in `workers/`. Events are delivered at least once, so a count can in rare cases be too high. An alarm goes off if anything ends up in the dead letter queue. The stats stay empty when running with `python dev.py` since the fake DynamoDB has no streams.
 
+## Live messages
+
+New messages are pushed to the browser with a websocket api, so there is no need to refresh. Posting still goes through `POST /messages`, the websocket is only for receiving.
+
+1. The chat page asks `GET /ws-token` (needs login) for a ticket that works for 60 seconds, and connects to the websocket api with it.
+2. `workers/ws_connection.py` checks the ticket and saves the connection in the connections table. The ticket has its own scope so it can't be used to log in.
+3. When a message is posted it goes through the event flow above, and `workers/broadcaster.py` sends it to every saved connection.
+
+If the websocket is down the page goes back to asking for messages every 5 seconds, and it tries to connect again. With `python dev.py` there is no websocket so it always polls.
+
 ## Monitoring
 
 - Logs are JSON in the log group `/lambda-lounge/api` and are kept for 14 days.

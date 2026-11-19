@@ -5,7 +5,7 @@ from unittest.mock import patch
 from workers import stats_consumer, stream_processor
 
 def stream_record(event_name, username="alice"):
-    return {"eventName": event_name, "dynamodb": {"NewImage": {"room": {"S": "general"}, "username": {"S": username}, "timestamp": {"N": "123"}}}}
+    return {"eventName": event_name, "dynamodb": {"NewImage": {"room": {"S": "general"}, "username": {"S": username}, "timestamp": {"N": "123"}, "messagecontent": {"S": "hi"}}}}
 
 def queue_record(message_id, username="alice"):
     return {"messageId": message_id, "body": json.dumps({"detail": {"username": username}})}
@@ -18,6 +18,7 @@ def test_stream_processor_only_publishes_inserts():
     assert len(entries) == 1
     assert entries[0]["DetailType"] == "MessagePosted"
     assert json.loads(entries[0]["Detail"])["username"] == "alice"
+    assert json.loads(entries[0]["Detail"])["messagecontent"] == "hi"
 
 def test_stream_processor_sends_in_batches_of_ten():
     with patch("workers.stream_processor.boto3.client") as client:
