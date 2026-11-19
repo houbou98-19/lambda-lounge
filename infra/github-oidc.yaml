@@ -92,6 +92,11 @@ Resources:
 
   DeployRole:
     Type: AWS::IAM::Role
+    Metadata:
+      cfn-lint:
+        config:
+          ignore_checks:
+            - W3037  # apigateway:TagResource is not in the linter's list, but AWS asked for it when the websocket stage was created
     Properties:
       RoleName: lambda-lounge-github-deploy
       AssumeRolePolicyDocument:
@@ -166,6 +171,8 @@ Resources:
                   - !Sub arn:aws:apigateway:${AWS::Region}::/apis
                   - !Sub arn:aws:apigateway:${AWS::Region}::/apis/*
                   - !Sub arn:aws:apigateway:${AWS::Region}::/tags/*
+                  - !Sub arn:aws:apigateway:${AWS::Region}::/domainnames
+                  - !Sub arn:aws:apigateway:${AWS::Region}::/domainnames/*
               - Effect: Allow
                 Action:
                   - dynamodb:CreateTable
